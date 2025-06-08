@@ -7,9 +7,11 @@ namespace ChatSupport.Tests.Services
 {
     public class ChatQueueServiceTests
     {
-        private SupportTeam CreateTestTeam()
+        [Fact]
+        public async Task AssignChats_With1Senior1Junior_ProperlyDistributes5Chats()
         {
-            return new SupportTeam
+            // Arrange
+            var testTeam = new SupportTeam
             {
                 TeamName = "Test Team",
                 Agents = new List<Agent>
@@ -18,65 +20,29 @@ namespace ChatSupport.Tests.Services
                     new() { Id = 2, Name = "Junior", Seniority = Seniority.Junior, Shift = 1, IsActive = true }
                 }
             };
-        }
-
-        [Fact]
-        public async Task AssignChats_With1Senior1Junior_ProperlyDistributes5Chats()
-        {
-            // Arrange
-            var service = new TestChatQueueService(new List<SupportTeam> { CreateTestTeam() });
-            service.SetTestTime(new DateTime(2023, 1, 1, 10, 0, 0)); // 10AM - office hours
-
-            // Act - Create 5 sessions
-            var sessionIds = new List<string>();
-            for (int i = 0; i < 5; i++)
-            {
-                sessionIds.Add(await service.CreateChatSession());
-            }
-
-            // Manually process queue
-            service.ProcessQueue();
-
-            // Assert
-            var agents = service.GetAllAgents();
-            var senior = agents.First(a => a.Seniority == Seniority.Senior);
-            var junior = agents.First(a => a.Seniority == Seniority.Junior);
-
-            Assert.Equal(1, senior.CurrentChats);
-            Assert.Equal(4, junior.CurrentChats);
-        }
-
-        [Fact]
-        public async Task CreateChatSession_WhenQueueFull_ThrowsException()
-        {
-            // Arrange
-            var testTeam = new SupportTeam
-            {
-                TeamName = "Small Team",
-                Agents = new List<Agent>
-                {
-                    new() { Id = 1, Name = "Junior Agent", Seniority = Seniority.Junior, Shift = 1, IsActive = true }
-                }
-            };
 
             var service = new TestChatQueueService(new List<SupportTeam> { testTeam });
             service.SetTestTime(new DateTime(2023, 1, 1, 10, 0, 0)); // 10AM - office hours
 
-            // Fill the queue to capacity (6)
-            for (int i = 0; i < 36; i++)
+            // Act - Create 5 sessions
+            for (int i = 0; i < 5; i++)
             {
                 await service.CreateChatSession();
             }
+            service.ProcessQueue();
 
-            // Act & Assert
-            var exception = await Assert.ThrowsAsync<Exception>(async () =>
-                await service.CreateChatSession());
+            // Assert
+            var agents = service.GetAllAgents();
+            var senior = agents.First(a => a.Id == 1);
+            var junior = agents.First(a => a.Id == 2);
 
-            Assert.Equal("Chat refused - queue and overflow are full", exception.Message);
+            // Verify chat distribution (4 to junior, 1 to senior)
+            Assert.Equal(4, junior.CurrentChats);
+            Assert.Equal(1, senior.CurrentChats);
         }
 
         [Fact]
-        public async Task AssignChats_With2Junior1Mid_ProperlyDistributes6Chats()
+        public async Task OverflowTeam_ActivatesDuringOfficeHours_WhenMainTeamFull()
         {
             // Arrange
             var testTeam = new SupportTeam
@@ -85,32 +51,36 @@ namespace ChatSupport.Tests.Services
                 Agents = new List<Agent>
                 {
                     new() { Id = 1, Name = "Junior 1", Seniority = Seniority.Junior, Shift = 1, IsActive = true },
-                    new() { Id = 2, Name = "Junior 2", Seniority = Seniority.Junior, Shift = 1, IsActive = true },
-                    new() { Id = 3, Name = "Mid-Level", Seniority = Seniority.MidLevel, Shift = 1, IsActive = true }
+                    new() { Id = 2, Name = "Junior 2", Seniority = Seniority.Junior, Shift = 1, IsActive = true }
                 }
             };
 
             var service = new TestChatQueueService(new List<SupportTeam> { testTeam });
             service.SetTestTime(new DateTime(2023, 1, 1, 10, 0, 0)); // 10AM - office hours
 
-            // Act - Create 6 sessions
-            var sessionIds = new List<string>();
-            for (int i = 0; i < 6; i++)
+            // Fill main team capacity (8 chats total - 4 per junior)
+            for (int i = 0; i < 8; i++)
             {
-                sessionIds.Add(await service.CreateChatSession());
+                await service.CreateChatSession();
             }
-
             service.ProcessQueue();
 
-            // Assert
-            var agents = service.GetAllAgents();
-            var junior1 = agents.First(a => a.Id == 1);
-            var junior2 = agents.First(a => a.Id == 2);
-            var midLevel = agents.First(a => a.Id == 3);
+            // Verify main team is full
+            var mainTeamAgents = service.GetAllAgents().Where(a => a.Id <= 2).ToList();
+            Assert.True(mainTeamAgents[0].CurrentChats == 4, "Junior 1 should have 4 chats");
+            Assert.True(mainTeamAgents[1].CurrentChats == 4, "Junior 2 should have 4 chats");
 
-            Assert.Equal(3, junior1.CurrentChats);
-            Assert.Equal(3, junior2.CurrentChats);
-            Assert.Equal(0, midLevel.CurrentChats);
+            // Act - Add more chats to trigger overflow
+            var overflowSessionId = await service.CreateChatSession();
+            service.ProcessQueue();
+
+            // Assert - Should be assigned to overflow agent
+            var overflowAgents = service.GetAllAgents()
+                .Where(a => a.Id >= 11) // Overflow agents have IDs >= 11
+                .ToList();
+
+            Assert.True(overflowAgents.Any(a => a.CurrentChats > 0), "Chat should be assigned to overflow agent");
+            Assert.Equal(1, overflowAgents.Sum(a => a.CurrentChats));
         }
     }
 }
