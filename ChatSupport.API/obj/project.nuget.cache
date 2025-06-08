@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "tFsGJ5ybpzk=",
+  "dgSpecHash": "RYnvXglKVgA=",
   "success": true,
-  "projectFilePath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
+  "projectFilePath": "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
   "expectedPackageFiles": [
     "/Users/kelumrubasin/.nuget/packages/microsoft.aspnetcore.openapi/9.0.5/microsoft.aspnetcore.openapi.9.0.5.nupkg.sha512",
     "/Users/kelumrubasin/.nuget/packages/microsoft.extensions.apidescription.server/6.0.5/microsoft.extensions.apidescription.server.6.0.5.nupkg.sha512",

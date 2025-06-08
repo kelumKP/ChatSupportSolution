@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {}
+    "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {}
   },
   "projects": {
-    "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {
+    "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
+        "projectUniqueName": "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
         "projectName": "ChatSupport.API",
-        "projectPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
+        "projectPath": "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
         "packagesPath": "/Users/kelumrubasin/.nuget/packages/",
-        "outputPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/",
+        "outputPath": "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.API/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/kelumrubasin/.nuget/NuGet/NuGet.Config"

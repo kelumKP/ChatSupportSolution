@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "bwO11M5xXiM=",
+  "dgSpecHash": "gu1Gxmse5ZQ=",
   "success": true,
-  "projectFilePath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj",
+  "projectFilePath": "/Users/kelumrubasin/Desktop/moneybase/chat/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj",
   "expectedPackageFiles": [
     "/Users/kelumrubasin/.nuget/packages/castle.core/5.1.1/castle.core.5.1.1.nupkg.sha512",
     "/Users/kelumrubasin/.nuget/packages/coverlet.collector/6.0.2/coverlet.collector.6.0.2.nupkg.sha512",

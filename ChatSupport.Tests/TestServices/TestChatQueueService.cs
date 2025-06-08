@@ -3,30 +3,55 @@ using ChatSupport.API.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace ChatSupport.Tests.TestServices
 {
     public class TestChatQueueService : ChatQueueService
     {
-    public TestChatQueueService(List<SupportTeam> customTeams) 
-        : base(Mock.Of<ILogger<ChatQueueService>>(), BuildTestConfig())
-    {
-        // Disable all automatic processing
-        typeof(ChatQueueService)
-            .GetField("_queueTimer", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(this, null);
-        
-        typeof(ChatQueueService)
-            .GetField("_monitorTimer", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(this, null);
-        
-        // Set test teams
-        typeof(ChatQueueService)
-            .GetField("_teams", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(this, customTeams);
-    }
+        private DateTime? _testTime;
+
+        public TestChatQueueService(List<SupportTeam> customTeams)
+            : base(Mock.Of<ILogger<ChatQueueService>>(), BuildTestConfig())
+        {
+            // Disable all automatic processing
+            typeof(ChatQueueService)
+                .GetField("_queueTimer", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(this, null);
+
+            typeof(ChatQueueService)
+                .GetField("_monitorTimer", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(this, null);
+
+            // Set test teams
+            typeof(ChatQueueService)
+                .GetField("_teams", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(this, customTeams);
+        }
+
+        public void SetTestTime(DateTime testTime)
+        {
+            _testTime = testTime;
+        }
+
+        protected override DateTime CurrentTime => _testTime ?? base.CurrentTime;
+
+        protected override int GetCurrentShift()
+        {
+            return _testTime.HasValue
+                ? base.GetCurrentShiftForTime(_testTime.Value.TimeOfDay)
+                : base.GetCurrentShift();
+        }
+
+        protected override bool IsDuringOfficeHours()
+        {
+            return _testTime.HasValue
+                ? base.IsDuringOfficeHoursForTime(_testTime.Value.TimeOfDay)
+                : base.IsDuringOfficeHours();
+        }
 
         private static IConfiguration BuildTestConfig()
         {
@@ -45,11 +70,12 @@ namespace ChatSupport.Tests.TestServices
             return (List<ChatSession>)field.GetValue(this);
         }
 
-public List<ChatSession> GetQueuedSessions()
-{
-    var field = typeof(ChatQueueService).GetField("_chatQueue", BindingFlags.NonPublic | BindingFlags.Instance);
-    return new List<ChatSession>((Queue<ChatSession>)field.GetValue(this));
-}
+        public List<ChatSession> GetQueuedSessions()
+        {
+            var field = typeof(ChatQueueService).GetField("_chatQueue", BindingFlags.NonPublic | BindingFlags.Instance);
+            return new List<ChatSession>((Queue<ChatSession>)field.GetValue(this));
+        }
+
         public List<Agent> GetAllAgents()
         {
             var teamsField = typeof(ChatQueueService).GetField("_teams", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -62,5 +88,7 @@ public List<ChatSession> GetQueuedSessions()
             allAgents.AddRange(overflowTeam.Agents);
             return allAgents;
         }
+        
+
     }
 }
