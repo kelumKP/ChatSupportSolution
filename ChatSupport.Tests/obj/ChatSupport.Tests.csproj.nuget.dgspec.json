@@ -1,0 +1,165 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj": {}
+  },
+  "projects": {
+    "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
+        "projectName": "ChatSupport.API",
+        "projectPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj",
+        "packagesPath": "/Users/kelumrubasin/.nuget/packages/",
+        "outputPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/kelumrubasin/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.AspNetCore.OpenApi": {
+              "target": "Package",
+              "version": "[9.0.5, )"
+            },
+            "Swashbuckle.AspNetCore": {
+              "target": "Package",
+              "version": "[8.1.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.300/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj",
+        "projectName": "ChatSupport.Tests",
+        "projectPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/ChatSupport.Tests.csproj",
+        "packagesPath": "/Users/kelumrubasin/.nuget/packages/",
+        "outputPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/kelumrubasin/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj": {
+                "projectPath": "/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/ChatSupport.API.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[17.12.0, )"
+            },
+            "Moq": {
+              "target": "Package",
+              "version": "[4.20.72, )"
+            },
+            "coverlet.collector": {
+              "target": "Package",
+              "version": "[6.0.2, )"
+            },
+            "xunit": {
+              "target": "Package",
+              "version": "[2.9.2, )"
+            },
+            "xunit.runner.visualstudio": {
+              "target": "Package",
+              "version": "[2.8.2, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.300/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
