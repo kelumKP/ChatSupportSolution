@@ -112,3 +112,4 @@
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/obj/Debug/net9.0/ChatSupport.Tests.pdb
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/obj/Debug/net9.0/ChatSupport.Tests.genruntimeconfig.cache
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/obj/Debug/net9.0/ref/ChatSupport.Tests.dll
+/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.Tests/obj/Debug/net9.0/ChatSupport.Tests.sourcelink.json

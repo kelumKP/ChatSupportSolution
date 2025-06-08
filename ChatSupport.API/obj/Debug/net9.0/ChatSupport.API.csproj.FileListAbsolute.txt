@@ -29,3 +29,4 @@
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/Debug/net9.0/ChatSupport.API.pdb
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/Debug/net9.0/ChatSupport.API.genruntimeconfig.cache
 /Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/Debug/net9.0/ref/ChatSupport.API.dll
+/Users/kelumrubasin/Desktop/moneybase/ChatSupportSolution/ChatSupport.API/obj/Debug/net9.0/ChatSupport.API.sourcelink.json
