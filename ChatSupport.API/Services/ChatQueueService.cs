@@ -320,16 +320,16 @@ namespace ChatSupport.API.Services
         }
 
         protected virtual int GetCurrentShiftForTime(TimeSpan time)
-{
-    var hour = time.Hours;
-    if (hour >= 0 && hour < 8) return 3;
-    if (hour >= 8 && hour < 16) return 1;
-    return 2;
-}
+        {
+            var hour = time.Hours;
+            if (hour >= 0 && hour < 8) return 3;
+            if (hour >= 8 && hour < 16) return 1;
+            return 2;
+        }
 
-protected virtual bool IsDuringOfficeHoursForTime(TimeSpan time)
-{
-    return time >= TimeSpan.FromHours(8) && time <= TimeSpan.FromHours(18);
-}
+        protected virtual bool IsDuringOfficeHoursForTime(TimeSpan time)
+        {
+            return time >= TimeSpan.FromHours(8) && time <= TimeSpan.FromHours(18);
+        }
     }
 }
