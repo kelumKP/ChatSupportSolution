@@ -10,6 +10,8 @@ namespace ChatSupport.API.Services
 {
     public class ChatQueueService : IChatQueueService, IDisposable
     {
+
+        private const int MaxConcurrentChatsPerAgent = 10;
         private readonly Queue<ChatSession> _chatQueue = new();
         private readonly List<ChatSession> _activeSessions = new();
         private readonly List<SupportTeam> _teams;
@@ -24,7 +26,100 @@ namespace ChatSupport.API.Services
         private readonly int _queueProcessingIntervalMs;
         private readonly int _sessionMonitoringIntervalMs;
 
-        // For testing purposes
+        public async Task<string> CreateChatSession()
+{
+    var sessionId = Guid.NewGuid().ToString();
+    var newSession = new ChatSession
+    {
+        SessionId = sessionId,
+        CreatedAt = CurrentTime,
+        LastPollTime = CurrentTime,
+        IsActive = true
+    };
+
+    lock (_lock)
+    {
+        var currentTeam = GetCurrentTeam();
+        var teamCapacity = CalculateTeamCapacity(currentTeam);
+        var maxQueueSize = (int)(teamCapacity * 1.5);
+        var totalSystemCapacity = teamCapacity + maxQueueSize; // 16 + 24 = 40
+        var totalActiveChats = _activeSessions.Count(s => s.IsActive);
+        var currentQueueSize = _chatQueue.Count;
+        var totalChatsInSystem = totalActiveChats + currentQueueSize;
+        bool isOfficeHours = IsDuringOfficeHours();
+
+        _logger.LogInformation(
+            "New chat request. Current system status: " +
+            "Active: {ActiveChats}/{TeamCapacity}, " +
+            "Queued: {QueuedChats}/{MaxQueueSize}, " +
+            "Total: {TotalChats}/{TotalCapacity}",
+            totalActiveChats, teamCapacity,
+            currentQueueSize, maxQueueSize,
+            totalChatsInSystem, totalSystemCapacity);
+
+        // Check main system capacity (40 in the example)
+        if (totalChatsInSystem >= totalSystemCapacity)
+        {
+            if (isOfficeHours && _overflowTeam != null)
+            {
+                var overflowCapacity = CalculateTeamCapacity(_overflowTeam);
+                var overflowMaxQueue = (int)(overflowCapacity * 1.5);
+                var totalOverflowCapacity = overflowCapacity + overflowMaxQueue;
+                
+                if (totalChatsInSystem >= totalSystemCapacity + totalOverflowCapacity)
+                {
+                    _logger.LogWarning(
+                        "Chat refused - system at full capacity (Main: {MainCapacity}, Overflow: {OverflowCapacity})",
+                        totalSystemCapacity, totalOverflowCapacity);
+                    throw new Exception("Chat refused - system and overflow are at full capacity");
+                }
+                
+                _logger.LogInformation(
+                    "Main team at capacity ({TotalSystemCapacity}), using overflow capacity ({OverflowCapacity})",
+                    totalSystemCapacity, totalOverflowCapacity);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Chat refused - system at full capacity ({TotalCapacity}) and not during office hours",
+                    totalSystemCapacity);
+                throw new Exception("Chat refused - system is at full capacity");
+            }
+        }
+
+        _chatQueue.Enqueue(newSession);
+        _logger.LogInformation(
+            "Created new chat session: {SessionId}. " +
+            "System totals - Active: {ActiveChats}, Queued: {QueuedChats}",
+            sessionId, totalActiveChats, currentQueueSize + 1);
+    }
+
+    return sessionId;
+}
+
+        private int CalculateTeamCapacity(SupportTeam team)
+        {
+            int capacity = 0;
+            foreach (var agent in team.Agents)
+            {
+                capacity += GetAgentCapacity(agent);
+            }
+            return capacity;
+        }
+
+        private int GetAgentCapacity(Agent agent)
+        {
+            double multiplier = agent.Seniority switch
+            {
+                Seniority.Junior => 0.4,
+                Seniority.MidLevel => 0.6,
+                Seniority.Senior => 0.8,
+                Seniority.TeamLead => 0.5,
+                _ => 0.4
+            };
+
+            return (int)(MaxConcurrentChatsPerAgent * multiplier);
+        }
         protected virtual DateTime CurrentTime => DateTime.UtcNow;
 
         public ChatQueueService(ILogger<ChatQueueService> logger, IConfiguration configuration)
@@ -86,49 +181,6 @@ namespace ChatSupport.API.Services
             ).ToList()
         };
 
-        public async Task<string> CreateChatSession()
-        {
-            var sessionId = Guid.NewGuid().ToString();
-            var newSession = new ChatSession
-            {
-                SessionId = sessionId,
-                CreatedAt = CurrentTime,
-                LastPollTime = CurrentTime
-            };
-
-            lock (_lock)
-            {
-                var currentTeam = GetCurrentTeam();
-                var currentQueueSize = _chatQueue.Count + _activeSessions.Count(s => s.IsActive);
-                var maxQueueSize = currentTeam.GetMaxQueueLength();
-                bool isOfficeHours = IsDuringOfficeHours();
-
-                if (currentQueueSize >= maxQueueSize)
-                {
-                    if (isOfficeHours && _overflowTeam != null)
-                    {
-                        var overflowQueueSize = currentQueueSize;
-                        var overflowMaxSize = _overflowTeam.GetMaxQueueLength();
-
-                        if (overflowQueueSize >= overflowMaxSize)
-                        {
-                            _logger.LogWarning("Chat refused - queue and overflow are full");
-                            throw new Exception("Chat refused - queue and overflow are full");
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Chat refused - queue is full");
-                        throw new Exception("Chat refused - queue is full");
-                    }
-                }
-
-                _chatQueue.Enqueue(newSession);
-                _logger.LogInformation("Created new chat session: {SessionId}", sessionId);
-            }
-
-            return sessionId;
-        }
 
         public ChatSession GetSessionStatus(string sessionId)
         {
@@ -167,56 +219,107 @@ namespace ChatSupport.API.Services
         }
 
         private void ProcessQueueCallback(object state)
+{
+    lock (_lock)
+    {
+        try
         {
-            lock (_lock)
+            var currentTeam = GetCurrentTeam();
+            var teamCapacity = CalculateTeamCapacity(currentTeam);
+            var totalActiveChats = _activeSessions.Count(s => s.IsActive);
+            var currentQueueSize = _chatQueue.Count;
+
+            _logger.LogInformation(
+                "Queue processing started. " +
+                "Active chats: {ActiveChats}/{TeamCapacity}, " +
+                "Queued chats: {QueuedChats}/{MaxQueueSize}",
+                totalActiveChats, teamCapacity,
+                currentQueueSize, (int)(teamCapacity * 1.5));
+
+            var activeAgents = GetActiveAgents(currentTeam);
+            bool useOverflow = false;
+
+            // Only use overflow if during office hours AND either:
+            // 1. Active chats >= team capacity, OR
+            // 2. Queue size > max queue size
+            if (IsDuringOfficeHours() && 
+                (totalActiveChats >= teamCapacity || currentQueueSize > (int)(teamCapacity * 1.5)))
             {
-                try
+                useOverflow = true;
+                var overflowAgents = GetActiveAgents(_overflowTeam);
+                activeAgents.AddRange(overflowAgents);
+                
+                _logger.LogInformation(
+                    "Activating overflow team. " +
+                    "Added {OverflowAgentCount} agents with capacity {OverflowCapacity}",
+                    overflowAgents.Count, CalculateTeamCapacity(_overflowTeam));
+            }
+
+            int assignedCount = 0;
+            while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < GetAgentCapacity(a)))
+            {
+                var session = _chatQueue.Dequeue();
+                var agent = FindAvailableAgent(activeAgents);
+
+                if (agent != null)
                 {
-                    var currentTeam = GetCurrentTeam();
-                    var activeAgents = GetActiveAgents(currentTeam);
+                    agent.CurrentChats++;
+                    session.AssignedAt = CurrentTime;
+                    session.AssignedAgentId = agent.Id;
+                    session.IsActive = true;
+                    _activeSessions.Add(session);
+                    assignedCount++;
 
-                    bool useOverflow = false;
-                    if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
-                    {
-                        useOverflow = true;
-                        activeAgents.AddRange(GetActiveAgents(_overflowTeam));
-                        _logger.LogDebug("Using overflow team for queue processing");
-                    }
-
-                    int assignedCount = 0;
-                    while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < a.MaxConcurrentChats))
-                    {
-                        var session = _chatQueue.Dequeue();
-                        var agent = FindAvailableAgent(activeAgents);
-
-                        if (agent != null)
-                        {
-                            agent.CurrentChats++;
-                            session.AssignedAt = CurrentTime;
-                            session.AssignedAgentId = agent.Id;
-                            _activeSessions.Add(session);
-                            assignedCount++;
-                            _logger.LogDebug("Assigned session {SessionId} to agent {AgentId}", session.SessionId, agent.Id);
-                        }
-                        else
-                        {
-                            _chatQueue.Enqueue(session);
-                            break;
-                        }
-                    }
-
-                    if (assignedCount > 0)
-                    {
-                        _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
-                    }
+                    _logger.LogDebug(
+                        "Assigned session {SessionId} to agent {AgentName} ({Seniority}). " +
+                        "Now handling {CurrentChats}/{Capacity} chats",
+                        session.SessionId, agent.Name, agent.Seniority,
+                        agent.CurrentChats, GetAgentCapacity(agent));
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogError(ex, "Error processing queue");
+                    _chatQueue.Enqueue(session);
+                    break;
+                }
+            }
+
+            _logger.LogInformation(
+                "Queue processing complete. " +
+                "Assigned {AssignedCount} chats. " +
+                "Current totals - Active: {ActiveChats}, Queued: {QueuedChats}",
+                assignedCount,
+                _activeSessions.Count(s => s.IsActive),
+                _chatQueue.Count);
+
+            // Log detailed agent utilization
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                foreach (var team in _teams.Append(_overflowTeam))
+                {
+                    var teamAgents = GetActiveAgents(team);
+                    if (teamAgents.Any())
+                    {
+                        _logger.LogDebug(
+                            "{TeamName} agent utilization:", 
+                            team.TeamName);
+                        
+                        foreach (var agent in teamAgents.OrderBy(a => a.Seniority))
+                        {
+                            _logger.LogDebug(
+                                "  {AgentName} ({Seniority}): {CurrentChats}/{Capacity} chats",
+                                agent.Name, agent.Seniority,
+                                agent.CurrentChats, GetAgentCapacity(agent));
+                        }
+                    }
                 }
             }
         }
-
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing queue");
+        }
+    }
+}
         private void MonitorSessionsCallback(object state)
         {
             lock (_lock)

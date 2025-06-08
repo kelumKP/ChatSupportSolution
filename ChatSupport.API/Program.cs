@@ -9,7 +9,7 @@ builder.Services.AddSwaggerGen();
 
 // Add chat queue services
 builder.Services.AddSingleton<IChatQueueService, ChatQueueService>();
-builder.Services.AddHostedService<ChatQueueBackgroundService>();
+
 
 var app = builder.Build();
 
