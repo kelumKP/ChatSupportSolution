@@ -232,7 +232,7 @@ namespace ChatSupport.Application.Services
                         _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
                     }
                     
-                                _logger.LogDebug($"Queue processing completed - Active: {_activeSessions.Count(s => s.IsActive)}, Queued: {_chatQueue.Count}, Assigned: {assignedCount}");
+                    _logger.LogDebug($"Queue processing completed - Active: {_activeSessions.Count(s => s.IsActive)}, Queued: {_chatQueue.Count}, Assigned: {assignedCount}");
                 }
                 catch (Exception ex)
                 {
@@ -246,7 +246,7 @@ namespace ChatSupport.Application.Services
 
             lock (_lock)
             {
-                        _logger.LogInformation($"Current Queue Status - Active Sessions: {_activeSessions.Count(s => s.IsActive)}, " +
+                _logger.LogInformation($"Current Queue Status - Active Sessions: {_activeSessions.Count(s => s.IsActive)}, " +
                              $"Queued Sessions: {_chatQueue.Count}, " +
                              $"Total Sessions: {_activeSessions.Count(s => s.IsActive) + _chatQueue.Count}");
 
