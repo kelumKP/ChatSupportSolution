@@ -4,75 +4,79 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace ChatSupport.API.Services
 {
     public class ChatQueueService : IChatQueueService, IDisposable
     {
+        private readonly bool _disableMonitoring;
         private readonly Queue<ChatSession> _chatQueue = new();
         private readonly List<ChatSession> _activeSessions = new();
         private readonly List<SupportTeam> _teams;
         private readonly SupportTeam _overflowTeam;
         private readonly object _lock = new();
-        private readonly Timer _queueTimer;
         private readonly Timer _monitorTimer;
         private readonly ILogger<ChatQueueService> _logger;
 
         private const int PollIntervalMs = 1000;
         private const int MaxMissedPolls = 3;
-        private readonly int _queueProcessingIntervalMs;
         private readonly int _sessionMonitoringIntervalMs;
 
-        public ChatQueueService(ILogger<ChatQueueService> logger, IConfiguration configuration)
+        public ChatQueueService(
+            ILogger<ChatQueueService> logger,
+            IConfiguration configuration,
+            List<SupportTeam>? overrideTeams = null,
+            SupportTeam? overrideOverflowTeam = null,
+            bool disableMonitoring = false)
         {
             _logger = logger;
-            _queueProcessingIntervalMs = configuration.GetValue("ChatQueue:QueueProcessingIntervalMs", 5000);
+            _disableMonitoring = disableMonitoring;
             _sessionMonitoringIntervalMs = configuration.GetValue("ChatQueue:SessionMonitoringIntervalMs", 10000);
 
-            _teams = InitializeTeams();
-            _overflowTeam = InitializeOverflowTeam();
+            _teams = overrideTeams ?? InitializeTeams();
+            _overflowTeam = overrideOverflowTeam ?? InitializeOverflowTeam();
 
-         //   _queueTimer = new Timer(ProcessQueueCallback, null, 0, _queueProcessingIntervalMs);
-            _monitorTimer = new Timer(MonitorSessionsCallback, null, 0, _sessionMonitoringIntervalMs);
-
-            _logger.LogInformation("ChatQueueService initialized with {TeamCount} teams", _teams.Count);
+            if (!_disableMonitoring)
+            {
+                _monitorTimer = new Timer(MonitorSessionsCallback, null, 0, _sessionMonitoringIntervalMs);
+            }
         }
+
 
         protected virtual List<SupportTeam> InitializeTeams() => new()
-{
-    new SupportTeam
-    {
-        TeamName = "Team A",
-        Agents = new List<Agent>
         {
-            new() { Id = 1, Name = "TeamLead A", Seniority = Seniority.TeamLead, Shift = 1 },
-            new() { Id = 2, Name = "Mid A1", Seniority = Seniority.MidLevel, Shift = 1 },
-            new() { Id = 3, Name = "Mid A2", Seniority = Seniority.MidLevel, Shift = 1 },
-            new() { Id = 4, Name = "Junior A", Seniority = Seniority.Junior, Shift = 1 }
-        }
-    },
-    new SupportTeam
-    {
-        TeamName = "Team B",
-        Agents = new List<Agent>
-        {
-            new() { Id = 5, Name = "Senior B", Seniority = Seniority.Senior, Shift = 2 },
-            new() { Id = 6, Name = "Mid B", Seniority = Seniority.MidLevel, Shift = 2 },
-            new() { Id = 7, Name = "Junior B1", Seniority = Seniority.Junior, Shift = 2 },
-            new() { Id = 8, Name = "Junior B2", Seniority = Seniority.Junior, Shift = 2 }
-        }
-    },
-    new SupportTeam
-    {
-        TeamName = "Team C",
-        Agents = new List<Agent>
-        {
-            new() { Id = 9, Name = "Mid C1", Seniority = Seniority.MidLevel, Shift = 3 },
-            new() { Id = 10, Name = "Mid C2", Seniority = Seniority.MidLevel, Shift = 3 }
-        }
-    }
-      };
+            new SupportTeam
+            {
+                TeamName = "Team A",
+                Agents = new List<Agent>
+                {
+                    new() { Id = 1, Name = "TeamLead A", Seniority = Seniority.TeamLead, Shift = 1 },
+                    new() { Id = 2, Name = "Mid A1", Seniority = Seniority.MidLevel, Shift = 1 },
+                    new() { Id = 3, Name = "Mid A2", Seniority = Seniority.MidLevel, Shift = 1 },
+                    new() { Id = 4, Name = "Junior A", Seniority = Seniority.Junior, Shift = 1 }
+                }
+            },
+            new SupportTeam
+            {
+                TeamName = "Team B",
+                Agents = new List<Agent>
+                {
+                    new() { Id = 5, Name = "Senior B", Seniority = Seniority.Senior, Shift = 2 },
+                    new() { Id = 6, Name = "Mid B", Seniority = Seniority.MidLevel, Shift = 2 },
+                    new() { Id = 7, Name = "Junior B1", Seniority = Seniority.Junior, Shift = 2 },
+                    new() { Id = 8, Name = "Junior B2", Seniority = Seniority.Junior, Shift = 2 }
+                }
+            },
+            new SupportTeam
+            {
+                TeamName = "Team C",
+                Agents = new List<Agent>
+                {
+                    new() { Id = 9, Name = "Mid C1", Seniority = Seniority.MidLevel, Shift = 3 },
+                    new() { Id = 10, Name = "Mid C2", Seniority = Seniority.MidLevel, Shift = 3 }
+                }
+            }
+        };
 
         protected virtual SupportTeam InitializeOverflowTeam() => new()
         {
@@ -82,7 +86,6 @@ namespace ChatSupport.API.Services
                 new Agent { Id = i, Name = $"Overflow {i}", Seniority = Seniority.Junior, Shift = 0 }
             ).ToList()
         };
-
 
         public async Task<string> CreateChatSession()
         {
@@ -97,93 +100,62 @@ namespace ChatSupport.API.Services
             lock (_lock)
             {
                 var currentTeam = GetCurrentTeam();
-
-                var currentQueueSize = _chatQueue.Count() + _activeSessions.Count(s => s.IsActive);
+                var currentQueueSize = _chatQueue.Count + _activeSessions.Count(s => s.IsActive);
                 var maxQueueSize = currentTeam.GetMaxQueueLength();
                 bool isOfficeHours = IsDuringOfficeHours();
 
-                if (_chatQueue.Count() >= maxQueueSize)
+                if (currentQueueSize >= maxQueueSize)
                 {
-                    if (isOfficeHours && _overflowTeam != null)
+                    if (isOfficeHours)
                     {
-                        var overflowQueueSize = currentQueueSize;
                         var overflowMaxSize = _overflowTeam.GetMaxQueueLength();
-
-                        if (overflowQueueSize >= overflowMaxSize)
+                        if (currentQueueSize >= overflowMaxSize)
                         {
-                            _logger.LogWarning("Chat refused - queue and overflow are full");
                             throw new Exception("Chat refused - queue and overflow are full");
                         }
                     }
                     else
                     {
-                        _logger.LogWarning("Chat refused - queue is full");
                         throw new Exception("Chat refused - queue is full");
                     }
                 }
 
                 _chatQueue.Enqueue(newSession);
-                _logger.LogInformation("Created new chat session: {SessionId}", sessionId);
-                 ContinuousTrigger();
-
+                AssignChatsToAgents();
             }
 
             return sessionId;
         }
 
-
-        private void ContinuousTrigger()
+        protected void AssignChatsToAgents()
         {
+            var currentTeam = GetCurrentTeam();
+            var activeAgents = GetActiveAgents(currentTeam);
 
-            lock (_lock)
+            if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
             {
-                try
+                activeAgents.AddRange(GetActiveAgents(_overflowTeam));
+            }
+
+            while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < a.MaxConcurrentChats))
+            {
+                var session = _chatQueue.Dequeue();
+                var agent = FindAvailableAgent(activeAgents);
+
+                if (agent != null)
                 {
-                    var currentTeam = GetCurrentTeam();
-                    var activeAgents = GetActiveAgents(currentTeam);
-
-                    bool useOverflow = false;
-                    if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
-                    {
-                        useOverflow = true;
-                        activeAgents.AddRange(GetActiveAgents(_overflowTeam));
-                        _logger.LogDebug("Using overflow team for queue processing");
-                    }
-
-                    int assignedCount = 0;
-                    while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < a.MaxConcurrentChats))
-                    {
-                        var session = _chatQueue.Dequeue();
-                        var agent = FindAvailableAgent(activeAgents);
-
-                        if (agent != null)
-                        {
-                            agent.CurrentChats++;
-                            session.AssignedAt = DateTime.UtcNow;
-                            session.AssignedAgentId = agent.Id;
-                            _activeSessions.Add(session);
-                            assignedCount++;
-                            _logger.LogDebug("Assigned session {SessionId} to agent {AgentId}", session.SessionId, agent.Id);
-                        }
-                        else
-                        {
-                            _chatQueue.Enqueue(session);
-                            break;
-                        }
-                    }
-
-                    if (assignedCount > 0)
-                    {
-                        _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
-                    }
+                    agent.CurrentChats++;
+                    session.AssignedAt = DateTime.UtcNow;
+                    session.AssignedAgentId = agent.Id;
+                    _activeSessions.Add(session);
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogError(ex, "Error processing queue");
+                    _chatQueue.Enqueue(session);
+                    break;
                 }
             }
         }
-
 
         public ChatSession GetSessionStatus(string sessionId)
         {
@@ -216,107 +188,30 @@ namespace ChatSupport.API.Services
             }
         }
 
-        public void ProcessQueue()
-        {
-            ProcessQueueCallback(null);
-        }
-
-        private void ProcessQueueCallback(object state)
+        protected void MonitorSessionsCallback(object state)
         {
             lock (_lock)
             {
-                try
+                var now = DateTime.UtcNow;
+                var currentShift = GetCurrentShift();
+
+                foreach (var agent in GetAllAgents())
                 {
-                    var currentTeam = GetCurrentTeam();
-                    var activeAgents = GetActiveAgents(currentTeam);
+                    agent.IsActive = agent.Shift == currentShift || agent.Shift == 0;
+                }
 
-                    bool useOverflow = false;
-                    if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
+                foreach (var session in _activeSessions.Where(s => s.IsActive).ToList())
+                {
+                    if ((now - session.LastPollTime).TotalSeconds > MaxMissedPolls * PollIntervalMs / 1000)
                     {
-                        useOverflow = true;
-                        activeAgents.AddRange(GetActiveAgents(_overflowTeam));
-                        _logger.LogDebug("Using overflow team for queue processing");
-                    }
+                        session.MissedPolls++;
 
-                    int assignedCount = 0;
-                    while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < a.MaxConcurrentChats))
-                    {
-                        var session = _chatQueue.Dequeue();
-                        var agent = FindAvailableAgent(activeAgents);
-
-                        if (agent != null)
+                        if (session.MissedPolls >= MaxMissedPolls)
                         {
-                            agent.CurrentChats++;
-                            session.AssignedAt = DateTime.UtcNow;
-                            session.AssignedAgentId = agent.Id;
-                            _activeSessions.Add(session);
-                            assignedCount++;
-                            _logger.LogDebug("Assigned session {SessionId} to agent {AgentId}", session.SessionId, agent.Id);
-                        }
-                        else
-                        {
-                            _chatQueue.Enqueue(session);
-                            break;
+                            var agent = GetAllAgents().FirstOrDefault(a => a.Id == session.AssignedAgentId);
+            
                         }
                     }
-
-                    if (assignedCount > 0)
-                    {
-                        _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing queue");
-                }
-            }
-        }
-
-        private void MonitorSessionsCallback(object state)
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    var now = DateTime.UtcNow;
-                    int expiredCount = 0;
-
-                    foreach (var session in _activeSessions.Where(s => s.IsActive).ToList())
-                    {
-                        if ((now - session.LastPollTime).TotalSeconds > MaxMissedPolls * PollIntervalMs / 1000)
-                        {
-                            session.MissedPolls++;
-
-                            if (session.MissedPolls >= MaxMissedPolls)
-                            {
-                              //  session.IsActive = false;
-                                var agent = GetAllAgents().FirstOrDefault(a => a.Id == session.AssignedAgentId);
-                                if (agent != null)
-                                {
-                                //    agent.CurrentChats--;
-                                    _logger.LogDebug("Released agent {AgentId} due to expired session", agent.Id);
-                                }
-                                expiredCount++;
-                            }
-                        }
-                    }
-
-                  //  _activeSessions.RemoveAll(s => !s.IsActive);
-
-                    var currentShift = GetCurrentShift();
-                    foreach (var agent in GetAllAgents())
-                    {
-                        agent.IsActive = agent.Shift == currentShift || agent.Shift == 0;
-                    }
-
-                    if (expiredCount > 0)
-                    {
-                        _logger.LogInformation("Session monitoring - expired {ExpiredCount} sessions", expiredCount);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error monitoring sessions");
                 }
             }
         }
@@ -326,7 +221,6 @@ namespace ChatSupport.API.Services
             return agents
                 .Where(a => a.IsActive && a.CurrentChats < a.MaxConcurrentChats)
                 .OrderBy(a => a.Seniority) // Juniors first
-                .ThenBy(a => a.Seniority == Seniority.Junior ? 0 : 1) // Explicit junior priority
                 .ThenBy(a => a.CurrentChats)
                 .FirstOrDefault();
         }
@@ -352,26 +246,33 @@ namespace ChatSupport.API.Services
             return allAgents;
         }
 
-        private int GetCurrentShift()
-        {
-            var hour = DateTime.UtcNow.Hour;
-            if (hour >= 0 && hour < 8) return 3;
-            if (hour >= 8 && hour < 16) return 1;
-            return 2;
-        }
+// In ChatQueueService.cs
+protected virtual int GetCurrentShift()
+{
+    var hour = DateTime.UtcNow.Hour;
+    return hour switch
+    {
+        >= 0 and < 8 => 3,
+        >= 8 and < 16 => 1,
+        _ => 2
+    };
+}
 
-        private bool IsDuringOfficeHours()
-        {
-            var now = DateTime.Now.TimeOfDay;
-            return now >= TimeSpan.FromHours(8) && now <= TimeSpan.FromHours(18);
-        }
+protected virtual bool IsDuringOfficeHours()
+{
+    var now = DateTime.Now.TimeOfDay;
+    return now >= TimeSpan.FromHours(8) && now <= TimeSpan.FromHours(18);
+}
 
         public void Dispose()
         {
-            _queueTimer?.Dispose();
             _monitorTimer?.Dispose();
             GC.SuppressFinalize(this);
-            _logger.LogInformation("ChatQueueService disposed");
         }
+        
+        public void InvokeMonitorSessionsCallbackForTest()
+{
+    MonitorSessionsCallback(null);
+}
     }
 }

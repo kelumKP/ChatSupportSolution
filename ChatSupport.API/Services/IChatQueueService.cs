@@ -7,6 +7,5 @@ namespace ChatSupport.API.Services
         Task<string> CreateChatSession();
         ChatSession GetSessionStatus(string sessionId);
         bool PollSession(string sessionId);
-        void ProcessQueue();
     }
 }
