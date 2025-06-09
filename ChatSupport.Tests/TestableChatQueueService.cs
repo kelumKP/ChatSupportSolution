@@ -12,10 +12,9 @@ namespace ChatSupport.Tests
 
         public TestableChatQueueService(
             ILogger<ChatQueueService> logger,
-            IConfiguration configuration,
             SupportTeam testTeam,
             IDateTimeProvider dateTimeProvider)
-            : base(logger, configuration, new List<SupportTeam> { testTeam },
+            : base(logger, new List<SupportTeam> { testTeam },
                   new SupportTeam { TeamName = "Overflow", IsOverflowTeam = true, Agents = new List<Agent>() },
                   true)
         {

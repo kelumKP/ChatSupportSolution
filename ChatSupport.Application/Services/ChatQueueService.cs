@@ -24,15 +24,14 @@ namespace ChatSupport.Application.Services
         private readonly int _sessionMonitoringIntervalMs;
 
         public ChatQueueService(
-            ILogger<ChatQueueService> logger,
-            IConfiguration configuration,
+            ILogger<ChatQueueService> logger=null,
             List<SupportTeam>? overrideTeams = null,
             SupportTeam? overrideOverflowTeam = null,
             bool disableMonitoring = false)
         {
             _logger = logger;
             _disableMonitoring = disableMonitoring;
-            _sessionMonitoringIntervalMs = configuration.GetValue("ChatQueue:SessionMonitoringIntervalMs", 10000);
+        
 
             _teams = overrideTeams ?? InitializeTeams();
             _overflowTeam = overrideOverflowTeam ?? InitializeOverflowTeam();
@@ -192,7 +191,6 @@ namespace ChatSupport.Application.Services
             {
                 try
                 {
-                    // Add this log at the beginning
                     _logger.LogDebug($"Triggering queue processing - Active: {_activeSessions.Count(s => s.IsActive)}, Queued: {_chatQueue.Count}");
 
 
@@ -324,7 +322,7 @@ namespace ChatSupport.Application.Services
             }
         }
 
-        private SupportTeam GetCurrentTeam()
+        public SupportTeam GetCurrentTeam()
         {
             var currentShift = GetCurrentShift();
             return _teams.FirstOrDefault(t => t.Agents.Any(a => a.Shift == currentShift)) ?? _teams.First();
