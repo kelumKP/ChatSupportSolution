@@ -96,7 +96,6 @@ namespace ChatSupport.Tests
 
             var service = new TestableChatQueueService(
                 _mockLogger.Object,
-                // _mockConfig.Object,
                 testTeam,
                 mockDateTime.Object);
 
@@ -107,7 +106,7 @@ namespace ChatSupport.Tests
                 sessionIds.Add(await service.CreateChatSession());
             }
 
-            // Force immediate assignment (bypass timer)
+            // immediate assignment
             service.ForceAssignChats();
 
             // Assert
@@ -134,13 +133,12 @@ namespace ChatSupport.Tests
             // Arrange
             var testTeam = CreateTestTeam2();
 
-            // Ensure we're testing during shift 1 (when our test agents are active)
+            // testing during shift 1 (when test agents are active)
             var mockDateTime = new Mock<IDateTimeProvider>();
             mockDateTime.Setup(x => x.GetCurrentShift()).Returns(1);
 
             var service = new TestableChatQueueService(
                 _mockLogger.Object,
-                // _mockConfig.Object,
                 testTeam,
                 mockDateTime.Object);
 
@@ -151,7 +149,7 @@ namespace ChatSupport.Tests
                 sessionIds.Add(await service.CreateChatSession());
             }
 
-            // Force immediate assignment (bypass timer)
+            // immediate assignment
             service.ForceAssignChats();
 
             // Assert
@@ -190,7 +188,7 @@ namespace ChatSupport.Tests
             var currentteam = service.GetCurrentTeam();
             var capacity = currentteam.CalculateCapacity();
             var finalCapacity = (capacity * 1.5) + capacity;
-            int roundedFinalCapacity = (int)Math.Floor(finalCapacity); // Result: 31
+            int roundedFinalCapacity = (int)Math.Floor(finalCapacity); 
 
             for (int i = 0; i < roundedFinalCapacity; i++)
             {
