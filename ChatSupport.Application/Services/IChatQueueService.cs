@@ -1,6 +1,7 @@
-using ChatSupport.API.Models;
+using ChatSupport.Domain;
 
-namespace ChatSupport.API.Services
+
+namespace ChatSupport.Application.Services
 {
     public interface IChatQueueService
     {

@@ -20,7 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ChatSupport.API\ChatSupport.API.csproj" />
+    <ProjectReference Include="..\ChatSupport.Domain\ChatSupport.Domain.csproj" />
+    <ProjectReference Include="..\ChatSupport.Application\ChatSupport.Application.csproj" />
   </ItemGroup>
 
 </Project>

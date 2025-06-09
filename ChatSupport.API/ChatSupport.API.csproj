@@ -11,4 +11,9 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ChatSupport.Application\ChatSupport.Application.csproj" />
+    <ProjectReference Include="..\ChatSupport.Domain\ChatSupport.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

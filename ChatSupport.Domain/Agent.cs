@@ -1,4 +1,4 @@
-namespace ChatSupport.API.Models
+namespace ChatSupport.Domain
 {
     public class Agent
     {

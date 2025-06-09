@@ -1,4 +1,4 @@
-using ChatSupport.API.Services;
+using ChatSupport.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

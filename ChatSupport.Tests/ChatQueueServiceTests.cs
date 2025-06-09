@@ -1,8 +1,8 @@
 using Moq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using ChatSupport.API.Services;
-using ChatSupport.API.Models;
+using ChatSupport.Application.Services;
+using ChatSupport.Domain;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;

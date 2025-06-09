@@ -1,11 +1,12 @@
-using ChatSupport.API.Models;
+using ChatSupport.Domain;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
 
-namespace ChatSupport.API.Services
+namespace ChatSupport.Application.Services
 {
     public class ChatQueueService : IChatQueueService, IDisposable
     {
@@ -191,6 +192,10 @@ namespace ChatSupport.API.Services
             {
                 try
                 {
+                    // Add this log at the beginning
+                    _logger.LogDebug($"Triggering queue processing - Active: {_activeSessions.Count(s => s.IsActive)}, Queued: {_chatQueue.Count}");
+
+
                     var currentTeam = GetCurrentTeam();
                     var activeAgents = GetActiveAgents(currentTeam);
 
@@ -228,6 +233,8 @@ namespace ChatSupport.API.Services
                     {
                         _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
                     }
+                    
+                                _logger.LogDebug($"Queue processing completed - Active: {_activeSessions.Count(s => s.IsActive)}, Queued: {_chatQueue.Count}, Assigned: {assignedCount}");
                 }
                 catch (Exception ex)
                 {
@@ -241,6 +248,11 @@ namespace ChatSupport.API.Services
 
             lock (_lock)
             {
+                        _logger.LogInformation($"Current Queue Status - Active Sessions: {_activeSessions.Count(s => s.IsActive)}, " +
+                             $"Queued Sessions: {_chatQueue.Count}, " +
+                             $"Total Sessions: {_activeSessions.Count(s => s.IsActive) + _chatQueue.Count}");
+
+
                 var now = DateTime.UtcNow;
                 var currentShift = GetCurrentShift();
                 _logger.LogInformation($"Current shift: {currentShift}");

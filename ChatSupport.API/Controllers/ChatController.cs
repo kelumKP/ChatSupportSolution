@@ -1,4 +1,5 @@
-using ChatSupport.API.Services;
+using ChatSupport.Application.Services;
+using ChatSupport.Domain;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ChatSupport.API.Controllers
