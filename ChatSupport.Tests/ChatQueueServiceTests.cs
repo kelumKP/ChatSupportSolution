@@ -10,89 +10,133 @@ using Xunit;
 
 namespace ChatSupport.Tests
 {
-    public class ChatQueueServiceTests
-    {
-        private readonly Mock<ILogger<ChatQueueService>> _mockLogger;
-        private readonly Mock<IConfiguration> _mockConfig;
-
-        public ChatQueueServiceTests()
+        public class ChatQueueServiceTests
         {
-            _mockLogger = new Mock<ILogger<ChatQueueService>>();
+            private readonly Mock<ILogger<ChatQueueService>> _mockLogger;
+            private readonly Mock<IConfiguration> _mockConfig;
 
-            var configurationSection = new Mock<IConfigurationSection>();
-            configurationSection.Setup(x => x.Value).Returns("10000");
-
-            _mockConfig = new Mock<IConfiguration>();
-            _mockConfig.Setup(x => x.GetSection("ChatQueue:SessionMonitoringIntervalMs"))
-                .Returns(configurationSection.Object);
-        }
-
-        private SupportTeam CreateTestTeam1()
-        {
-            return new SupportTeam
+            public ChatQueueServiceTests()
             {
-                TeamName = "UnitTest Team 1",
-                Agents = new List<Agent>
+                _mockLogger = new Mock<ILogger<ChatQueueService>>();
+
+                var configurationSection = new Mock<IConfigurationSection>();
+                configurationSection.Setup(x => x.Value).Returns("10000");
+
+                _mockConfig = new Mock<IConfiguration>();
+                _mockConfig.Setup(x => x.GetSection("ChatQueue:SessionMonitoringIntervalMs"))
+                    .Returns(configurationSection.Object);
+            }
+
+            private SupportTeam CreateTestTeam1()
+            {
+                return new SupportTeam
                 {
-                    new Agent {
-                        Id = 1,
-                        Name = "Senior 1",
-                        Seniority = Seniority.Senior,
-                        Shift = 1,
-                        IsActive = true
-                    },
-                    new Agent {
-                        Id = 2,
-                        Name = "Junior 1",
-                        Seniority = Seniority.Junior,
-                        Shift = 1,
-                        IsActive = true
+                    TeamName = "UnitTest Team 1",
+                    Agents = new List<Agent>
+                    {
+                        new Agent {
+                            Id = 1,
+                            Name = "Senior 1",
+                            Seniority = Seniority.Senior,
+                            Shift = 1,
+                            IsActive = true
+                        },
+                        new Agent {
+                            Id = 2,
+                            Name = "Junior 1",
+                            Seniority = Seniority.Junior,
+                            Shift = 1,
+                            IsActive = true
+                        }
+                    }
+                };
+            }
+
+            private SupportTeam CreateTestTeam2()
+            {
+                return new SupportTeam
+                {
+                    TeamName = "UnitTest Team 2",
+                    Agents = new List<Agent>
+                    {
+                        new Agent {
+                            Id = 1,
+                            Name = "Mid 1",
+                            Seniority = Seniority.MidLevel,
+                            Shift = 1,
+                            IsActive = true
+                        },
+                        new Agent {
+                            Id = 2,
+                            Name = "Junior 1",
+                            Seniority = Seniority.Junior,
+                            Shift = 1,
+                            IsActive = true
+                        },
+                        new Agent {
+                            Id = 3,
+                            Name = "Junior 2",
+                            Seniority = Seniority.Junior,
+                            Shift = 1,
+                            IsActive = true
                     }
                 }
-            };
-        }
-
-        private SupportTeam CreateTestTeam2()
-        {
-            return new SupportTeam
-            {
-                TeamName = "UnitTest Team 2",
-                Agents = new List<Agent>
-                {
-                    new Agent {
-                        Id = 1,
-                        Name = "Mid 1",
-                        Seniority = Seniority.MidLevel,
-                        Shift = 1,
-                        IsActive = true
-                    },
-                    new Agent {
-                        Id = 2,
-                        Name = "Junior 1",
-                        Seniority = Seniority.Junior,
-                        Shift = 1,
-                        IsActive = true
-                    },
-                    new Agent {
-                        Id = 3,
-                        Name = "Junior 2",
-                        Seniority = Seniority.Junior,
-                        Shift = 1,
-                        IsActive = true
-                }
+                };
             }
-            };
-        }
 
-        [Fact]
-        public async Task UnitTest1_ShouldAssignChatsAccordingToSeniority()
-        {
-            // Arrange
-            var testTeam = CreateTestTeam1();
+            [Fact]
+            public async Task UnitTest1_ShouldAssignChatsAccordingToSeniority()
+            {
+                // Arrange
+                var testTeam = CreateTestTeam1();
 
-            // Ensure we're testing during shift 1 (when our test agents are active)
-            var mockDateTime = new Mock<IDateTimeProvider>();
-            mockDateTime.Setup(x => x.GetCurrentShift()).Returns(1);
+                // Ensure we're testing during shift 1 (when our test agents are active)
+                var mockDateTime = new Mock<IDateTimeProvider>();
+                mockDateTime.Setup(x => x.GetCurrentShift()).Returns(1);
+
+                var service = new TestableChatQueueService(
+                    _mockLogger.Object,
+                    _mockConfig.Object,
+                    testTeam,
+                    mockDateTime.Object);
+
+                // Act - Create chat sessions
+                var sessionIds = new List<string>();
+                for (int i = 0; i < 5; i++)
+                {
+                    sessionIds.Add(await service.CreateChatSession());
+                }
+
+                // Force immediate assignment (bypass timer)
+                service.ForceAssignChats();
+
+                // Assert
+                var junior = testTeam.Agents.First(a => a.Seniority == Seniority.Junior);
+                var senior = testTeam.Agents.First(a => a.Seniority == Seniority.Senior);
+
+                // Get all active sessions with assignments
+                var assignedSessions = sessionIds
+                    .Select(service.GetSessionStatus)
+                    .Where(s => s?.AssignedAgentId != null)
+                    .ToList();
+
+                var juniorAssignments = assignedSessions.Count(s => s.AssignedAgentId == junior.Id);
+                var seniorAssignments = assignedSessions.Count(s => s.AssignedAgentId == senior.Id);
+
+                Assert.Equal(4, juniorAssignments);
+                Assert.Equal(1, seniorAssignments);
+            }
+
+            [Fact]
+            public async Task UnitTest2_ShouldAssignChatsToJuniorsFirst()
+            {
+
+                // Arrange
+            var testTeam = CreateTestTeam2();
+
+                // Ensure we're testing during shift 1 (when our test agents are active)
+                var mockDateTime = new Mock<IDateTimeProvider>();
+                    mockDateTime.Setup(x => x.GetCurrentShift()).Returns(1);
 
             var service = new TestableChatQueueService(
                 _mockLogger.Object,
@@ -102,7 +146,7 @@ namespace ChatSupport.Tests
 
             // Act - Create chat sessions
             var sessionIds = new List<string>();
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
             {
                 sessionIds.Add(await service.CreateChatSession());
             }
@@ -111,69 +155,25 @@ namespace ChatSupport.Tests
             service.ForceAssignChats();
 
             // Assert
-            var junior = testTeam.Agents.First(a => a.Seniority == Seniority.Junior);
-            var senior = testTeam.Agents.First(a => a.Seniority == Seniority.Senior);
+            var mid = testTeam.Agents.First(a => a.Seniority == Seniority.MidLevel);
+            var junior1 = testTeam.Agents.First(a => a.Id == 2);
+            var junior2 = testTeam.Agents.First(a => a.Id == 3);
 
             // Get all active sessions with assignments
             var assignedSessions = sessionIds
-                .Select(service.GetSessionStatus)
-                .Where(s => s?.AssignedAgentId != null)
-                .ToList();
+            .Select(service.GetSessionStatus)
+            .Where(s => s?.AssignedAgentId != null)
+            .ToList();
 
-            var juniorAssignments = assignedSessions.Count(s => s.AssignedAgentId == junior.Id);
-            var seniorAssignments = assignedSessions.Count(s => s.AssignedAgentId == senior.Id);
+            var midAssignments = assignedSessions.Count(s => s.AssignedAgentId == mid.Id);
+            var junior1Assignments = assignedSessions.Count(s => s.AssignedAgentId == junior1.Id);
+            var junior2Assignments = assignedSessions.Count(s => s.AssignedAgentId == junior2.Id);
 
-            Assert.Equal(4, juniorAssignments);
-            Assert.Equal(1, seniorAssignments);
+            // Juniors should get 3 each, mid should get none
+            Assert.Equal(0, midAssignments);
+            Assert.Equal(3, junior1Assignments);
+            Assert.Equal(3, junior2Assignments);
         }
 
-        [Fact]
-        public async Task UnitTest2_ShouldAssignChatsToJuniorsFirst()
-        {
-
-            // Arrange
-           var testTeam = CreateTestTeam2();
-
-            // Ensure we're testing during shift 1 (when our test agents are active)
-            var mockDateTime = new Mock<IDateTimeProvider>();
-                mockDateTime.Setup(x => x.GetCurrentShift()).Returns(1);
-
-        var service = new TestableChatQueueService(
-            _mockLogger.Object,
-            _mockConfig.Object,
-            testTeam,
-            mockDateTime.Object);
-
-        // Act - Create chat sessions
-        var sessionIds = new List<string>();
-        for (int i = 0; i < 6; i++)
-        {
-            sessionIds.Add(await service.CreateChatSession());
         }
-
-        // Force immediate assignment (bypass timer)
-        service.ForceAssignChats();
-
-        // Assert
-        var mid = testTeam.Agents.First(a => a.Seniority == Seniority.MidLevel);
-        var junior1 = testTeam.Agents.First(a => a.Id == 2);
-        var junior2 = testTeam.Agents.First(a => a.Id == 3);
-
-        // Get all active sessions with assignments
-        var assignedSessions = sessionIds
-        .Select(service.GetSessionStatus)
-        .Where(s => s?.AssignedAgentId != null)
-        .ToList();
-
-        var midAssignments = assignedSessions.Count(s => s.AssignedAgentId == mid.Id);
-        var junior1Assignments = assignedSessions.Count(s => s.AssignedAgentId == junior1.Id);
-        var junior2Assignments = assignedSessions.Count(s => s.AssignedAgentId == junior2.Id);
-
-        // Juniors should get 3 each, mid should get none
-        Assert.Equal(0, midAssignments);
-        Assert.Equal(3, junior1Assignments);
-        Assert.Equal(3, junior2Assignments);
     }
-
-    }
-}
