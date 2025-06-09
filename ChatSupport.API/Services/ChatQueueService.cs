@@ -87,53 +87,28 @@ namespace ChatSupport.API.Services
             ).ToList()
         };
 
-        public async Task<string> CreateChatSession()
+
+        public ChatSession GetSessionStatus(string sessionId)
         {
-            var sessionId = Guid.NewGuid().ToString();
-            var newSession = new ChatSession
-            {
-                SessionId = sessionId,
-                CreatedAt = DateTime.UtcNow,
-                LastPollTime = DateTime.UtcNow
-            };
+            if (string.IsNullOrWhiteSpace(sessionId))
+                throw new ArgumentException("Session ID cannot be empty", nameof(sessionId));
 
             lock (_lock)
             {
-                var currentTeam = GetCurrentTeam();
-                var currentQueueSize = _chatQueue.Count + _activeSessions.Count(s => s.IsActive);
-                var maxQueueSize = currentTeam.GetMaxQueueLength();
-                bool isOfficeHours = IsDuringOfficeHours();
-
-                if (currentQueueSize >= maxQueueSize)
-                {
-                    if (isOfficeHours)
-                    {
-                        var overflowMaxSize = _overflowTeam.GetMaxQueueLength();
-                        if (currentQueueSize >= overflowMaxSize)
-                        {
-                            throw new Exception("Chat refused - queue and overflow are full");
-                        }
-                    }
-                    else
-                    {
-                        throw new Exception("Chat refused - queue is full");
-                    }
-                }
-
-                _chatQueue.Enqueue(newSession);
-                AssignChatsToAgents();
+                return _activeSessions.FirstOrDefault(s => s.SessionId == sessionId) ??
+                       _chatQueue.FirstOrDefault(s => s.SessionId == sessionId);
             }
-
-            return sessionId;
         }
 
         protected void AssignChatsToAgents()
         {
             var currentTeam = GetCurrentTeam();
+            _logger.LogInformation($"Current processing team: {currentTeam.TeamName}");
             var activeAgents = GetActiveAgents(currentTeam);
 
             if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
             {
+                _logger.LogInformation($"Queue length exceeded for {currentTeam.TeamName}, activating overflow team");
                 activeAgents.AddRange(GetActiveAgents(_overflowTeam));
             }
 
@@ -148,25 +123,174 @@ namespace ChatSupport.API.Services
                     session.AssignedAt = DateTime.UtcNow;
                     session.AssignedAgentId = agent.Id;
                     _activeSessions.Add(session);
+            
+                    _logger.LogInformation($"Assigned chat session {session.SessionId} to agent {agent.Name} " +
+                                 $"(ID: {agent.Id}, Seniority: {agent.Seniority}, " +
+                                 $"Current chats: {agent.CurrentChats}/{agent.MaxConcurrentChats})");
                 }
                 else
                 {
+                    _logger.LogWarning("No available agents found for chat session, requeuing");
                     _chatQueue.Enqueue(session);
                     break;
                 }
             }
         }
 
-        public ChatSession GetSessionStatus(string sessionId)
+        public async Task<string> CreateChatSession()
         {
-            if (string.IsNullOrWhiteSpace(sessionId))
-                throw new ArgumentException("Session ID cannot be empty", nameof(sessionId));
+            var sessionId = Guid.NewGuid().ToString();
+            var newSession = new ChatSession
+            {
+                SessionId = sessionId,
+                CreatedAt = DateTime.UtcNow,
+                LastPollTime = DateTime.UtcNow
+            };
 
             lock (_lock)
             {
-                return _activeSessions.FirstOrDefault(s => s.SessionId == sessionId) ??
-                       _chatQueue.FirstOrDefault(s => s.SessionId == sessionId);
+                var currentTeam = GetCurrentTeam();
+
+                var currentQueueSize = _chatQueue.Count() + _activeSessions.Count(s => s.IsActive);
+                var maxQueueSize = currentTeam.GetMaxQueueLength();
+                bool isOfficeHours = IsDuringOfficeHours();
+
+                if (_chatQueue.Count() >= maxQueueSize)
+                {
+                    if (isOfficeHours && _overflowTeam != null)
+                    {
+                        var overflowQueueSize = currentQueueSize;
+                        var overflowMaxSize = _overflowTeam.GetMaxQueueLength();
+
+                        if (overflowQueueSize >= overflowMaxSize)
+                        {
+                            _logger.LogWarning("Chat refused - queue and overflow are full");
+                            throw new Exception("Chat refused - queue and overflow are full");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Chat refused - queue is full");
+                        throw new Exception("Chat refused - queue is full");
+                    }
+                }
+
+                _chatQueue.Enqueue(newSession);
+                _logger.LogInformation("Created new chat session: {SessionId}", sessionId);
+                 ContinuousTrigger();
+
             }
+
+            return sessionId;
+        }
+
+        private void ContinuousTrigger()
+        {
+
+            lock (_lock)
+            {
+                try
+                {
+                    var currentTeam = GetCurrentTeam();
+                    var activeAgents = GetActiveAgents(currentTeam);
+
+                    bool useOverflow = false;
+                    if (IsDuringOfficeHours() && _chatQueue.Count > currentTeam.GetMaxQueueLength())
+                    {
+                        useOverflow = true;
+                        activeAgents.AddRange(GetActiveAgents(_overflowTeam));
+                        _logger.LogDebug("Using overflow team for queue processing");
+                    }
+
+                    int assignedCount = 0;
+                    while (_chatQueue.Count > 0 && activeAgents.Any(a => a.CurrentChats < a.MaxConcurrentChats))
+                    {
+                        var session = _chatQueue.Dequeue();
+                        var agent = FindAvailableAgent(activeAgents);
+
+                        if (agent != null)
+                        {
+                            agent.CurrentChats++;
+                            session.AssignedAt = DateTime.UtcNow;
+                            session.AssignedAgentId = agent.Id;
+                            _activeSessions.Add(session);
+                            assignedCount++;
+                            _logger.LogDebug("Assigned session {SessionId} to agent {AgentId}", session.SessionId, agent.Id);
+                        }
+                        else
+                        {
+                            _chatQueue.Enqueue(session);
+                            break;
+                        }
+                    }
+
+                    if (assignedCount > 0)
+                    {
+                        _logger.LogInformation("Processed queue - assigned {AssignedCount} sessions", assignedCount);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing queue");
+                }
+            }
+        }
+        protected void MonitorSessionsCallback(object state)
+        {
+            _logger.LogDebug("Starting session monitoring cycle");
+
+            lock (_lock)
+            {
+                var now = DateTime.UtcNow;
+                var currentShift = GetCurrentShift();
+                _logger.LogInformation($"Current shift: {currentShift}");
+
+                foreach (var agent in GetAllAgents())
+                {
+                    var wasActive = agent.IsActive;
+                    agent.IsActive = agent.Shift == currentShift || agent.Shift == 0;
+
+                    if (wasActive != agent.IsActive)
+                    {
+                        _logger.LogInformation($"Agent {agent.Name} (ID: {agent.Id}) activity changed to {agent.IsActive}");
+                    }
+                }
+
+                foreach (var session in _activeSessions.Where(s => s.IsActive).ToList())
+                {
+                    if ((now - session.LastPollTime).TotalSeconds > MaxMissedPolls * PollIntervalMs / 1000)
+                    {
+                        session.MissedPolls++;
+                        _logger.LogWarning($"Session {session.SessionId} missed poll ({session.MissedPolls}/{MaxMissedPolls})");
+
+                        if (session.MissedPolls >= MaxMissedPolls)
+                        {
+                            var agent = GetAllAgents().FirstOrDefault(a => a.Id == session.AssignedAgentId);
+                        }
+                    }
+                }
+            }
+
+            _logger.LogDebug("Completed session monitoring cycle");
+        }
+
+        private Agent FindAvailableAgent(List<Agent> agents)
+        {
+            var availableAgents = agents
+                .Where(a => a.IsActive && a.CurrentChats < a.MaxConcurrentChats)
+                .OrderBy(a => a.Seniority)
+                .ThenBy(a => a.CurrentChats)
+                .ToList();
+
+            _logger.LogDebug($"Available agents count: {availableAgents.Count}");
+    
+            foreach (var agent in availableAgents)
+            {
+                _logger.LogTrace($"Available agent: {agent.Name} (ID: {agent.Id}, Seniority: {agent.Seniority}, " +
+                       $"Current chats: {agent.CurrentChats}/{agent.MaxConcurrentChats})");
+            }
+
+            return availableAgents.FirstOrDefault();
         }
 
         public bool PollSession(string sessionId)
@@ -186,43 +310,6 @@ namespace ChatSupport.API.Services
 
                 return _chatQueue.Any(s => s.SessionId == sessionId);
             }
-        }
-
-        protected void MonitorSessionsCallback(object state)
-        {
-            lock (_lock)
-            {
-                var now = DateTime.UtcNow;
-                var currentShift = GetCurrentShift();
-
-                foreach (var agent in GetAllAgents())
-                {
-                    agent.IsActive = agent.Shift == currentShift || agent.Shift == 0;
-                }
-
-                foreach (var session in _activeSessions.Where(s => s.IsActive).ToList())
-                {
-                    if ((now - session.LastPollTime).TotalSeconds > MaxMissedPolls * PollIntervalMs / 1000)
-                    {
-                        session.MissedPolls++;
-
-                        if (session.MissedPolls >= MaxMissedPolls)
-                        {
-                            var agent = GetAllAgents().FirstOrDefault(a => a.Id == session.AssignedAgentId);
-            
-                        }
-                    }
-                }
-            }
-        }
-
-        private Agent FindAvailableAgent(List<Agent> agents)
-        {
-            return agents
-                .Where(a => a.IsActive && a.CurrentChats < a.MaxConcurrentChats)
-                .OrderBy(a => a.Seniority) // Juniors first
-                .ThenBy(a => a.CurrentChats)
-                .FirstOrDefault();
         }
 
         private SupportTeam GetCurrentTeam()
@@ -245,24 +332,22 @@ namespace ChatSupport.API.Services
             allAgents.AddRange(_overflowTeam.Agents);
             return allAgents;
         }
+        protected virtual int GetCurrentShift()
+        {
+            var hour = DateTime.UtcNow.Hour;
+            return hour switch
+            {
+                >= 0 and < 8 => 3,
+                >= 8 and < 16 => 1,
+                _ => 2
+            };
+        }
 
-// In ChatQueueService.cs
-protected virtual int GetCurrentShift()
-{
-    var hour = DateTime.UtcNow.Hour;
-    return hour switch
-    {
-        >= 0 and < 8 => 3,
-        >= 8 and < 16 => 1,
-        _ => 2
-    };
-}
-
-protected virtual bool IsDuringOfficeHours()
-{
-    var now = DateTime.Now.TimeOfDay;
-    return now >= TimeSpan.FromHours(8) && now <= TimeSpan.FromHours(18);
-}
+        protected virtual bool IsDuringOfficeHours()
+        {
+            var now = DateTime.Now.TimeOfDay;
+            return now >= TimeSpan.FromHours(8) && now <= TimeSpan.FromHours(18);
+        }
 
         public void Dispose()
         {
@@ -271,8 +356,8 @@ protected virtual bool IsDuringOfficeHours()
         }
         
         public void InvokeMonitorSessionsCallbackForTest()
-{
-    MonitorSessionsCallback(null);
-}
+        {
+            MonitorSessionsCallback(null);
+        }
     }
 }
